@@ -167,6 +167,13 @@ freq = cv2.getTickFrequency()
 videostream = VideoStream(resolution=(imW,imH),framerate=30).start()
 time.sleep(1)
 
+#calculate Cropping
+# assumption imW > imH
+cropped_stripe_width = (imW - imH) // 2
+imW = imH
+cropped_x1 = cropped_stripe_width
+cropped_x2 = imW+cropped_stripe_width
+
 #for frame1 in camera.capture_continuous(rawCapture, format="bgr",use_video_port=True):
 while True:
 
@@ -177,7 +184,8 @@ while True:
     frame1 = videostream.read()
 
     # Acquire frame and resize to expected shape [1xHxWx3]
-    frame = frame1.copy()
+    frame_raw = frame1.copy()
+    frame = frame_raw[0:imH, cropped_x1:cropped_x2]
     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     frame_resized = cv2.resize(frame_rgb, (width, height))
     input_data = np.expand_dims(frame_resized, axis=0)
@@ -186,6 +194,7 @@ while True:
     if floating_model:
         input_data = (np.float32(input_data) - input_mean) / input_std
 
+    start_time = time.monotonic()
     # Perform the actual detection by running the model with the image as input
     interpreter.set_tensor(input_details[0]['index'],input_data)
     interpreter.invoke()
@@ -194,6 +203,7 @@ while True:
     boxes = interpreter.get_tensor(output_details[boxes_idx]['index'])[0] # Bounding box coordinates of detected objects
     classes = interpreter.get_tensor(output_details[classes_idx]['index'])[0] # Class index of detected objects
     scores = interpreter.get_tensor(output_details[scores_idx]['index'])[0] # Confidence of detected objects
+    end_time = time.monotonic()
 
     # Loop over all detections and draw detection box if confidence is above minimum threshold
     for i in range(len(scores)):
@@ -218,6 +228,7 @@ while True:
 
     # Draw framerate in corner of frame
     cv2.putText(frame,'FPS: {0:.2f}'.format(frame_rate_calc),(30,50),cv2.FONT_HERSHEY_SIMPLEX,1,(255,255,0),2,cv2.LINE_AA)
+    cv2.putText(frame,'Inference: {:_>3.0f} ms'.format((end_time - start_time) * 1000),(30,80),cv2.FONT_HERSHEY_SIMPLEX,1,(255,255,0),2,cv2.LINE_AA)
 
     # All the results have been drawn on the frame, so it's time to display it.
     cv2.imshow('Object detector', frame)
